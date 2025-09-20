@@ -1,0 +1,427 @@
+#!/usr/bin/env bash
+# vim:foldmethod=marker:
+# shellcheck disable=2086,2015,2016
+#
+# An fzf wrapper around the GitLab CLI - inspired by gh-fzf
+#
+# MIT License
+#
+# Copyright (c) 2024 Based on gh-fzf by Ben Elan <https://benelan.dev>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+set -e
+
+GLAB_FZF_VERSION="v0.1.0"
+
+FZF_USER_VERSION="$(fzf --version | awk '{print $1}')"
+
+# USAGE INFO AND INTERNAL FUNCTIONS                                     {{{1
+
+has() { command -v "$1" >/dev/null 2>&1; }
+
+gitlab_status() {
+    # Simple status check - could be enhanced later
+    if has curl; then
+        curl -s https://status.gitlab.com/api/v2/status.json | grep -o '"indicator":"[^"]*"' | cut -d'"' -f4 || echo "unknown"
+    else
+        echo "available"
+    fi
+}
+
+# https://apple.stackexchange.com/a/123408
+version_number() {
+    echo "$@" | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }'
+}
+
+requires_fzf_version() {
+    if [ "$(version_number "$1")" -gt "$(version_number "$FZF_USER_VERSION")" ]; then
+        error "${2:-"glab-fzf"} requires fzf version >= $1 (found $FZF_USER_VERSION)"
+    fi
+}
+
+error() {
+    if [ -n "$1" ]; then
+        printf "Error: " >&2
+        printf "%s\n" "$@" >&2
+    fi
+    printf "\n%s\n" "See -h for usage info" >&2
+    exit 1
+}
+
+help_cmd() {
+    printf "
+An fzf wrapper around the GitLab CLI.
+
+Usage:
+    glab fzf [<command>] [flags]
+
+Core Commands:
+    issue       Search for and interact with GitLab issues.
+    mr          Search for and interact with GitLab merge requests.
+    pipeline    Search for and interact with GitLab pipelines.
+    project     Search for and interact with GitLab projects.
+
+All arguments are passed directly to glab. For flag options see:
+    glab <command> list --help
+
+Other Commands:
+    help        Print this help message.
+    status      Print GitLab's service status.
+    version     Print the version of glab-fzf.
+
+Check out the glab CLI documentation for more information.
+" >&2
+    exit 0
+}
+
+# ----------------------------------------------------------------------1}}}
+# CONFIGURATION                                                         {{{1
+
+GLAB_FZF_DEFAULT_LIMIT="${GLAB_FZF_DEFAULT_LIMIT:-50}"
+
+if [ -z "$GLAB_FZF_COPY_CMD" ]; then
+    if has /mnt/c/Windows/System32/clip.exe; then
+        GLAB_FZF_COPY_CMD="/mnt/c/Windows/System32/clip.exe" # Windows (WSL)
+    elif has wl-copy && [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+        GLAB_FZF_COPY_CMD="wl-copy" # Linux (Wayland)
+    elif has xsel; then
+        GLAB_FZF_COPY_CMD="xsel -bi" # Linux (X11)
+    elif has xclip; then
+        GLAB_FZF_COPY_CMD="xclip -selection clipboard" # Linux (X11)
+    elif has pbcopy; then
+        GLAB_FZF_COPY_CMD="pbcopy" # OSX
+    fi
+fi
+
+if [ -z "$GLAB_FZF_OPEN_CMD" ]; then
+    if [ -n "$BROWSER" ]; then
+        GLAB_FZF_OPEN_CMD="$BROWSER"
+    elif has wslview; then
+        GLAB_FZF_OPEN_CMD="wslview"
+    elif has cygstart; then
+        GLAB_FZF_OPEN_CMD="cygstart"
+    elif has start; then
+        GLAB_FZF_OPEN_CMD="start"
+    elif has xdg-open; then
+        GLAB_FZF_OPEN_CMD="xdg-open"
+    elif has open; then
+        GLAB_FZF_OPEN_CMD="open"
+    fi
+fi
+
+# export SHELL so bash features can be used in subshells created by fzf
+SHELL="$(which bash)"
+export SHELL
+
+GITLAB_STATUS="$(gitlab_status || true)"
+if [ -n "$GITLAB_STATUS" ] && [ "$GITLAB_STATUS" != "none" ]; then
+    GITLAB_STATUS_INDICATOR=" GitLab Status: $GITLAB_STATUS "
+fi
+
+export GLAB_FZF_RELOAD_KEY="${GLAB_FZF_RELOAD_KEY:-ctrl-r}"
+export GLAB_FZF_OPEN_KEY="${GLAB_FZF_OPEN_KEY:-ctrl-o}"
+export GLAB_FZF_COPY_KEY="${GLAB_FZF_COPY_KEY:-ctrl-y}"
+export GLAB_FZF_HELP_KEY="${GLAB_FZF_HELP_KEY:-alt-?}"
+export GLAB_FZF_TOGGLE_HINTS_KEY="${GLAB_FZF_TOGGLE_HINTS_KEY:-alt-H}"
+export GLAB_FZF_TOGGLE_PREVIEW_KEY="${GLAB_FZF_TOGGLE_PREVIEW_KEY:-alt-P}"
+
+global_binds="Globals > ($GLAB_FZF_OPEN_KEY: open url) ($GLAB_FZF_COPY_KEY: copy url) ($GLAB_FZF_RELOAD_KEY: reload) ($GLAB_FZF_HELP_KEY: help) ($GLAB_FZF_TOGGLE_PREVIEW_KEY: toggle preview) ($GLAB_FZF_TOGGLE_HINTS_KEY: toggle hints) (alt-1: 100 items) (alt-2: 200 items) (...) (alt-9: 900 items)"
+
+# The following fzf options are shared by all commands. They are prepended to
+# the FZF_DEFAULT_OPTS environment variable so they can be overridden by users.
+export FZF_DEFAULT_OPTS='
+--no-hscroll --no-exit-0 --header-lines=1 --cycle --reverse --info=right
+--color="fg:#ebdbb2,fg+:#ebdbb2,bg:#282828,bg+:#3c3836,hl:#d3869b:bold,hl+:#d3869b"
+--color="info:#83a598,prompt:#bdae93,spinner:#fabd2f,pointer:#83a598,marker:#fe8019,header:#928374,label:#83a598"
+'${GITLAB_STATUS_INDICATOR:+--preview-label=\"$GITLAB_STATUS_INDICATOR\" --color=\"preview-label:#b57614,preview-border:#b57614\"}'
+--preview-window="right,wrap,<75(down,wrap)"
+--bind="'$GLAB_FZF_TOGGLE_PREVIEW_KEY':change-preview-window(down,70%,<75(down,70%,wrap)|hidden,<75(hidden)|)"
+--bind="'$GLAB_FZF_TOGGLE_HINTS_KEY':toggle-header"
+--bind="'$GLAB_FZF_RELOAD_KEY':reload(eval \"$FZF_DEFAULT_COMMAND\")"
+--bind="alt-1:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 100\")"
+--bind="alt-2:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 200\")"
+--bind="alt-3:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 300\")"
+--bind="alt-4:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 400\")"
+--bind="alt-5:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 500\")"
+--bind="alt-6:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 600\")"
+--bind="alt-7:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 700\")"
+--bind="alt-8:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 800\")"
+--bind="alt-9:reload(eval \"$FZF_DEFAULT_COMMAND --per-page 900\")"
+'"$FZF_DEFAULT_OPTS"' --no-select-1 --ansi --no-multi --delimiter="\\s\\s+"'
+
+# ----------------------------------------------------------------------1}}}
+# COMMAND > DEFAULT                                                     {{{1
+
+default_cmd() {
+    script_path="${BASH_SOURCE[0]}"
+    FZF_DEFAULT_COMMAND="printf '%s\n' COMMAND \
+        issue mr pipeline project" \
+        fzf \
+        --preview='
+            cmd={};
+            glab help $cmd
+        ' \
+        --preview-window='right:75%,wrap' \
+        --bind="enter:execute($script_path {})" \
+        --bind="$GLAB_FZF_HELP_KEY:execute(glab help)"
+}
+
+# ----------------------------------------------------------------------1}}}
+# COMMAND > ISSUE                                                       {{{1
+
+issue_cmd() {
+    # KEYBINDINGS      {{{2
+    export GLAB_FZF_ISSUE_VIEW_KEY="${GLAB_FZF_ISSUE_VIEW_KEY:-enter}"
+    export GLAB_FZF_ISSUE_EDIT_KEY="${GLAB_FZF_ISSUE_EDIT_KEY:-alt-e}"
+    export GLAB_FZF_ISSUE_CLOSE_KEY="${GLAB_FZF_ISSUE_CLOSE_KEY:-alt-c}"
+    export GLAB_FZF_ISSUE_REOPEN_KEY="${GLAB_FZF_ISSUE_REOPEN_KEY:-alt-o}"
+    export GLAB_FZF_ISSUE_ASSIGN_KEY="${GLAB_FZF_ISSUE_ASSIGN_KEY:-alt-a}"
+    export GLAB_FZF_ISSUE_SUBSCRIBE_KEY="${GLAB_FZF_ISSUE_SUBSCRIBE_KEY:-alt-s}"
+
+    export GLAB_FZF_ISSUE_STATE_FILTER_KEY="${GLAB_FZF_ISSUE_STATE_FILTER_KEY:-alt-S}"
+    export GLAB_FZF_ISSUE_ASSIGNEE_FILTER_KEY="${GLAB_FZF_ISSUE_ASSIGNEE_FILTER_KEY:-alt-A}"
+    export GLAB_FZF_ISSUE_AUTHOR_FILTER_KEY="${GLAB_FZF_ISSUE_AUTHOR_FILTER_KEY:-alt-U}"
+
+    issue_header="Actions > ($GLAB_FZF_ISSUE_VIEW_KEY: view) ($GLAB_FZF_ISSUE_EDIT_KEY: edit) ($GLAB_FZF_ISSUE_CLOSE_KEY: close) ($GLAB_FZF_ISSUE_REOPEN_KEY: reopen) ($GLAB_FZF_ISSUE_ASSIGN_KEY: assign) ($GLAB_FZF_ISSUE_SUBSCRIBE_KEY: subscribe)
+Filters > ($GLAB_FZF_ISSUE_STATE_FILTER_KEY: state=all) ($GLAB_FZF_ISSUE_ASSIGNEE_FILTER_KEY: assignee=@me) ($GLAB_FZF_ISSUE_AUTHOR_FILTER_KEY: author=@me)
+$global_binds
+
+"
+
+    # FZF COMMAND      {{{2
+    FZF_DEFAULT_COMMAND="glab issue list --per-page $GLAB_FZF_DEFAULT_LIMIT $*" \
+        fzf \
+        --preview='glab issue view {1}' \
+        --prompt="issue ❱ " \
+        --header="$issue_header" \
+        --bind="start:${GLAB_FZF_HIDE_HINTS:+"toggle-header"}" \
+        --bind="$GLAB_FZF_OPEN_KEY:execute-silent(glab issue view --web {1} &)+refresh-preview" \
+        --bind="$GLAB_FZF_COPY_KEY:execute-silent(glab issue view --web {1} | grep -o 'https://[^[:space:]]*' | head -1 | $GLAB_FZF_COPY_CMD)+refresh-preview" \
+        --bind="$GLAB_FZF_HELP_KEY:execute(glab help issue)" \
+        --bind="$GLAB_FZF_ISSUE_VIEW_KEY:execute(glab issue view {1})+refresh-preview" \
+        --bind="$GLAB_FZF_ISSUE_EDIT_KEY:execute(glab issue update {1})+refresh-preview" \
+        --bind="$GLAB_FZF_ISSUE_CLOSE_KEY:execute(glab issue close {1})+refresh-preview" \
+        --bind="$GLAB_FZF_ISSUE_REOPEN_KEY:execute(glab issue reopen {1})+refresh-preview" \
+        --bind="$GLAB_FZF_ISSUE_ASSIGN_KEY:execute(
+            read -rp 'Enter username to assign: ' user </dev/tty >/dev/tty 2>&1;
+            [ -n \"\$user\" ] && glab issue update {1} --assignee \"\$user\"
+        )+refresh-preview" \
+        --bind="$GLAB_FZF_ISSUE_SUBSCRIBE_KEY:execute(glab issue subscribe {1})+refresh-preview" \
+        --bind="$GLAB_FZF_ISSUE_STATE_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --state all")' \
+        --bind="$GLAB_FZF_ISSUE_ASSIGNEE_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --assignee @me")' \
+        --bind="$GLAB_FZF_ISSUE_AUTHOR_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --author @me")'
+
+    #2}}}
+}
+
+# ----------------------------------------------------------------------1}}}
+# COMMAND > MR (MERGE REQUEST)                                         {{{1
+
+mr_cmd() {
+    # KEYBINDINGS      {{{2
+    export GLAB_FZF_MR_VIEW_KEY="${GLAB_FZF_MR_VIEW_KEY:-enter}"
+    export GLAB_FZF_MR_CHECKOUT_KEY="${GLAB_FZF_MR_CHECKOUT_KEY:-alt-o}"
+    export GLAB_FZF_MR_EDIT_KEY="${GLAB_FZF_MR_EDIT_KEY:-alt-e}"
+    export GLAB_FZF_MR_DIFF_KEY="${GLAB_FZF_MR_DIFF_KEY:-alt-d}"
+    export GLAB_FZF_MR_APPROVE_KEY="${GLAB_FZF_MR_APPROVE_KEY:-alt-a}"
+    export GLAB_FZF_MR_MERGE_KEY="${GLAB_FZF_MR_MERGE_KEY:-alt-m}"
+    export GLAB_FZF_MR_CLOSE_KEY="${GLAB_FZF_MR_CLOSE_KEY:-alt-c}"
+    export GLAB_FZF_MR_REOPEN_KEY="${GLAB_FZF_MR_REOPEN_KEY:-alt-r}"
+
+    export GLAB_FZF_MR_STATE_FILTER_KEY="${GLAB_FZF_MR_STATE_FILTER_KEY:-alt-S}"
+    export GLAB_FZF_MR_ASSIGNEE_FILTER_KEY="${GLAB_FZF_MR_ASSIGNEE_FILTER_KEY:-alt-A}"
+    export GLAB_FZF_MR_AUTHOR_FILTER_KEY="${GLAB_FZF_MR_AUTHOR_FILTER_KEY:-alt-U}"
+    export GLAB_FZF_MR_DRAFT_FILTER_KEY="${GLAB_FZF_MR_DRAFT_FILTER_KEY:-alt-D}"
+
+    mr_header="Actions > ($GLAB_FZF_MR_VIEW_KEY: view) ($GLAB_FZF_MR_CHECKOUT_KEY: checkout) ($GLAB_FZF_MR_EDIT_KEY: edit) ($GLAB_FZF_MR_DIFF_KEY: diff) ($GLAB_FZF_MR_APPROVE_KEY: approve) ($GLAB_FZF_MR_MERGE_KEY: merge) ($GLAB_FZF_MR_CLOSE_KEY: close) ($GLAB_FZF_MR_REOPEN_KEY: reopen)
+Filters > ($GLAB_FZF_MR_STATE_FILTER_KEY: state=all) ($GLAB_FZF_MR_ASSIGNEE_FILTER_KEY: assignee=@me) ($GLAB_FZF_MR_AUTHOR_FILTER_KEY: author=@me) ($GLAB_FZF_MR_DRAFT_FILTER_KEY: draft)
+$global_binds
+
+"
+
+    # FZF COMMAND      {{{2
+    FZF_DEFAULT_COMMAND="glab mr list --per-page $GLAB_FZF_DEFAULT_LIMIT $*" \
+        fzf \
+        --preview='glab mr view {1}' \
+        --prompt="mr ❱ " \
+        --header="$mr_header" \
+        --bind="start:${GLAB_FZF_HIDE_HINTS:+"toggle-header"}" \
+        --bind="$GLAB_FZF_OPEN_KEY:execute-silent(glab mr view --web {1} &)+refresh-preview" \
+        --bind="$GLAB_FZF_COPY_KEY:execute-silent(glab mr view --web {1} | grep -o 'https://[^[:space:]]*' | head -1 | $GLAB_FZF_COPY_CMD)+refresh-preview" \
+        --bind="$GLAB_FZF_HELP_KEY:execute(glab help mr)" \
+        --bind="$GLAB_FZF_MR_VIEW_KEY:execute(glab mr view {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_CHECKOUT_KEY:execute(glab mr checkout {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_EDIT_KEY:execute(glab mr update {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_DIFF_KEY:execute(glab mr diff {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_APPROVE_KEY:execute(glab mr approve {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_MERGE_KEY:execute(glab mr merge {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_CLOSE_KEY:execute(glab mr close {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_REOPEN_KEY:execute(glab mr reopen {1})+refresh-preview" \
+        --bind="$GLAB_FZF_MR_STATE_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --state all")' \
+        --bind="$GLAB_FZF_MR_ASSIGNEE_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --assignee @me")' \
+        --bind="$GLAB_FZF_MR_AUTHOR_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --author @me")' \
+        --bind="$GLAB_FZF_MR_DRAFT_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --draft")'
+
+    #2}}}
+}
+
+# ----------------------------------------------------------------------1}}}
+# COMMAND > PIPELINE                                                   {{{1
+
+pipeline_cmd() {
+    # KEYBINDINGS      {{{2
+    export GLAB_FZF_PIPELINE_VIEW_KEY="${GLAB_FZF_PIPELINE_VIEW_KEY:-enter}"
+    export GLAB_FZF_PIPELINE_RETRY_KEY="${GLAB_FZF_PIPELINE_RETRY_KEY:-alt-r}"
+    export GLAB_FZF_PIPELINE_CANCEL_KEY="${GLAB_FZF_PIPELINE_CANCEL_KEY:-alt-c}"
+    export GLAB_FZF_PIPELINE_DELETE_KEY="${GLAB_FZF_PIPELINE_DELETE_KEY:-alt-d}"
+
+    export GLAB_FZF_PIPELINE_STATUS_FILTER_KEY="${GLAB_FZF_PIPELINE_STATUS_FILTER_KEY:-alt-s}"
+    export GLAB_FZF_PIPELINE_BRANCH_FILTER_KEY="${GLAB_FZF_PIPELINE_BRANCH_FILTER_KEY:-alt-b}"
+
+    pipeline_header="Actions > ($GLAB_FZF_PIPELINE_VIEW_KEY: view) ($GLAB_FZF_PIPELINE_RETRY_KEY: retry) ($GLAB_FZF_PIPELINE_CANCEL_KEY: cancel) ($GLAB_FZF_PIPELINE_DELETE_KEY: delete)
+Filters > ($GLAB_FZF_PIPELINE_STATUS_FILTER_KEY: status) ($GLAB_FZF_PIPELINE_BRANCH_FILTER_KEY: current branch)
+$global_binds
+
+"
+
+    # FZF COMMAND      {{{2
+    FZF_DEFAULT_COMMAND="glab pipeline list --per-page $GLAB_FZF_DEFAULT_LIMIT $*" \
+        fzf \
+        --preview='glab pipeline view {1}' \
+        --prompt="pipeline ❱ " \
+        --header="$pipeline_header" \
+        --bind="start:${GLAB_FZF_HIDE_HINTS:+"toggle-header"}" \
+        --bind="$GLAB_FZF_OPEN_KEY:execute-silent(glab pipeline view --web {1} &)+refresh-preview" \
+        --bind="$GLAB_FZF_COPY_KEY:execute-silent(glab pipeline view --web {1} | grep -o 'https://[^[:space:]]*' | head -1 | $GLAB_FZF_COPY_CMD)+refresh-preview" \
+        --bind="$GLAB_FZF_HELP_KEY:execute(glab help pipeline)" \
+        --bind="$GLAB_FZF_PIPELINE_VIEW_KEY:execute(glab pipeline view {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PIPELINE_RETRY_KEY:execute(glab pipeline retry {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PIPELINE_CANCEL_KEY:execute(glab pipeline cancel {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PIPELINE_DELETE_KEY:execute(glab pipeline delete {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PIPELINE_STATUS_FILTER_KEY:execute(
+            read -rp 'Enter status (running,success,failed,canceled): ' status </dev/tty >/dev/tty 2>&1;
+            [ -n \"\$status\" ] && eval \"\$FZF_DEFAULT_COMMAND --status \$status\"
+        )+refresh-preview" \
+        --bind="$GLAB_FZF_PIPELINE_BRANCH_FILTER_KEY"':reload(
+            eval "$FZF_DEFAULT_COMMAND --ref $(git symbolic-ref --short HEAD)"
+        )'
+
+    #2}}}
+}
+
+# ----------------------------------------------------------------------1}}}
+# COMMAND > PROJECT                                                    {{{1
+
+project_cmd() {
+    # KEYBINDINGS      {{{2
+    export GLAB_FZF_PROJECT_VIEW_KEY="${GLAB_FZF_PROJECT_VIEW_KEY:-enter}"
+    export GLAB_FZF_PROJECT_CLONE_KEY="${GLAB_FZF_PROJECT_CLONE_KEY:-alt-c}"
+    export GLAB_FZF_PROJECT_FORK_KEY="${GLAB_FZF_PROJECT_FORK_KEY:-alt-f}"
+    export GLAB_FZF_PROJECT_ISSUES_KEY="${GLAB_FZF_PROJECT_ISSUES_KEY:-alt-i}"
+    export GLAB_FZF_PROJECT_MRS_KEY="${GLAB_FZF_PROJECT_MRS_KEY:-alt-m}"
+    export GLAB_FZF_PROJECT_PIPELINES_KEY="${GLAB_FZF_PROJECT_PIPELINES_KEY:-alt-p}"
+
+    export GLAB_FZF_PROJECT_OWNED_FILTER_KEY="${GLAB_FZF_PROJECT_OWNED_FILTER_KEY:-alt-o}"
+    export GLAB_FZF_PROJECT_MEMBER_FILTER_KEY="${GLAB_FZF_PROJECT_MEMBER_FILTER_KEY:-alt-M}"
+
+    project_header="Actions > ($GLAB_FZF_PROJECT_VIEW_KEY: view) ($GLAB_FZF_PROJECT_CLONE_KEY: clone) ($GLAB_FZF_PROJECT_FORK_KEY: fork) ($GLAB_FZF_PROJECT_ISSUES_KEY: issues) ($GLAB_FZF_PROJECT_MRS_KEY: mrs) ($GLAB_FZF_PROJECT_PIPELINES_KEY: pipelines)
+Filters > ($GLAB_FZF_PROJECT_OWNED_FILTER_KEY: owned) ($GLAB_FZF_PROJECT_MEMBER_FILTER_KEY: member)
+$global_binds
+
+"
+
+    # FZF COMMAND      {{{2
+    script_path="${BASH_SOURCE[0]}"
+    FZF_DEFAULT_COMMAND="glab repo list --per-page $GLAB_FZF_DEFAULT_LIMIT $*" \
+        fzf \
+        --preview='glab repo view {1}' \
+        --prompt="project ❱ " \
+        --header="$project_header" \
+        --bind="start:${GLAB_FZF_HIDE_HINTS:+"toggle-header"}" \
+        --bind="$GLAB_FZF_OPEN_KEY:execute-silent(glab repo view --web {1} &)+refresh-preview" \
+        --bind="$GLAB_FZF_COPY_KEY:execute-silent(glab repo view --web {1} | grep -o 'https://[^[:space:]]*' | head -1 | $GLAB_FZF_COPY_CMD)+refresh-preview" \
+        --bind="$GLAB_FZF_HELP_KEY:execute(glab help repo)" \
+        --bind="$GLAB_FZF_PROJECT_VIEW_KEY:execute(glab repo view {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_CLONE_KEY:execute(glab repo clone {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_FORK_KEY:execute(glab repo fork {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_ISSUES_KEY:execute($script_path issue --repo {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_MRS_KEY:execute($script_path mr --repo {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_PIPELINES_KEY:execute($script_path pipeline --repo {1})+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_OWNED_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --mine")' \
+        --bind="$GLAB_FZF_PROJECT_MEMBER_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --member")'
+
+    #2}}}
+}
+
+# ----------------------------------------------------------------------1}}}
+# PARSE ARGUMENTS                                                       {{{1
+
+# PARSE ARGS TO FIND A REPO FLAG {{{2
+find_repo_flag() {
+    args=("$@")
+    for i in $(seq 0 ${#args[@]}); do
+        val=${args[$i]}
+        case $val in
+            -R | --repo)
+                export GITLAB_PROJECT="${args[$((i + 1))]}"
+                ;;
+            -R=* | --repo=*)
+                export GITLAB_PROJECT="${val#*=}"
+                ;;
+        esac
+    done
+}
+
+# ENTRY FUNCTION {{{2
+main() {
+    command="$1"
+    [ -n "$command" ] && shift || default_cmd
+
+    find_repo_flag "$@"
+
+    case $command in
+        h | -h | help | --help)
+            help_cmd "$@"
+            ;;
+        i | -i | issue | issues | --issue | --issues)
+            issue_cmd "$@"
+            ;;
+        m | -m | mr | mrs | --mr | --mrs)
+            mr_cmd "$@"
+            ;;
+        p | -p | pipeline | pipelines | --pipeline | --pipelines)
+            pipeline_cmd "$@"
+            ;;
+        project | projects | --project | --projects)
+            project_cmd "$@"
+            ;;
+        status)
+            echo "$GITLAB_STATUS"
+            ;;
+        v | V | -v | -V | version | --version)
+            printf "%s\n" "$GLAB_FZF_VERSION"
+            ;;
+        *)
+            error "invalid command: \"$command\""
+            ;;
+    esac
+} #2}}}
+
+main "$@"
