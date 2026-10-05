@@ -37,11 +37,11 @@ To test changes to `gh-fzfl` locally with the GitHub CLI, link your local direct
 ```bash
 ln -s -f $(pwd)/gh-fzf ./gh-fzfll/gh-fzfll
 cd gh-fzfll
-gh extension remove gh-fzfll
+gh extension remove gh-fzfll 2>/dev/null || true
 gh extension install . 
 cd -
 read -p "test changes ... ?" conf
-gh fzfll search repos
+gh fzfll search repos test
 ```
 
 Run and test your local changes directly:
@@ -448,6 +448,21 @@ The mode is displayed in the bottom left corner. Start by searching with GitHub 
    | Key     | Description                                | Configuration Environment Variable |
    | ------- | ------------------------------------------ | ---------------------------------- |
    | `alt-/` | Toggle between `gh` and `fzf` search modes | `GH_FZF_SEARCH_TOGGLE_MODE_KEY`    |
+
+- **Repo Search Specific Keybindings** (when using `gh fzf search repos`):
+
+   | Key     | Description                                                     | Configuration Environment Variable      |
+   | ------- | --------------------------------------------------------------- | --------------------------------------- |
+   | `alt-C` | Clone the selected repository (see `gh repo clone --help`)      | `GH_FZF_SEARCH_REPO_CLONE_KEY`          |
+   | `alt-F` | Fork the selected repository (see `gh repo fork --help`)        | `GH_FZF_SEARCH_REPO_FORK_KEY`           |
+   | `alt-e` | Edit the selected repository settings (see `gh repo edit --help`) | `GH_FZF_SEARCH_REPO_EDIT_KEY`         |
+   | `alt-i` | Run `gh fzf issue` on the selected repository                   | `GH_FZF_SEARCH_REPO_VIEW_ISSUES_KEY`    |
+   | `alt-p` | Run `gh fzf pr` on the selected repository                      | `GH_FZF_SEARCH_REPO_VIEW_PRS_KEY`       |
+   | `alt-r` | Run `gh fzf run` on the selected repository                     | `GH_FZF_SEARCH_REPO_VIEW_RUNS_KEY`      |
+   | `alt-s` | Sort search results by stars                                    | `GH_FZF_SEARCH_REPO_SORT_STARS_KEY`     |
+   | `alt-f` | Sort search results by forks                                    | `GH_FZF_SEARCH_REPO_SORT_FORKS_KEY`     |
+   | `alt-u` | Sort search results by last updated                             | `GH_FZF_SEARCH_REPO_SORT_UPDATED_KEY`   |
+   | `alt-c` | Sort search results by creation date                            | `GH_FZF_SEARCH_REPO_SORT_CREATED_KEY`   |
 
 - **Examples:**
 
