@@ -14,7 +14,7 @@ Add a new section at the top of the checklist (descending chronological order) w
 ### What was changed:
 - Created comprehensive test framework for key binding validation (test-keybindings.sh, run-all-tests.sh)
 - Built mock data generation utilities for testing without GitLab API (test-data/mock-data-generator.sh)
-- Implemented repository path parsing fix using `cut -d'\t' -f1` to prevent field concatenation
+- Implemented repository path parsing fix using `cut -f1` to prevent field concatenation
 - Modified project command bindings to properly extract repository paths from fzf output (gh-glab/gh-glab:354,358-366)
 - Added environment setup and validation scripts (setup-test-environment.sh)
 - Created installation guide (INSTALL.md)
@@ -46,9 +46,9 @@ Add a new section at the top of the checklist (descending chronological order) w
 ### Required Actions After Making Changes
 
 1. **Update checklist.md** - Add new dated section with changes
-2. **Reinstall extension** - Run the following command to ensure user can test changes:
+2. **Run offline validation** - Run the following command to verify bindings without live GitLab actions:
    ```bash
-   npm install -g .
+   python3 tests/test-project-bindings.py
    ```
 
 ## Examples
@@ -73,7 +73,7 @@ When fixing MR navigation error:
 ## Critical Requirements
 
 - **ALWAYS** update checklist.md when making changes
-- **ALWAYS** reinstall extension after changes: `npm install -g .`
+- **ALWAYS** run offline validation after changes: `python3 tests/test-project-bindings.py`
 - Keep change history in descending order (newest first)
 - Be specific about what files were modified and what functionality changed
 - Update the appropriate status sections based on what was fixed/broken

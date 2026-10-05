@@ -1,5 +1,22 @@
 # gh-glab Feature Verification Checklist
 
+## Changes - 2026-10-06
+
+### What changed
+- Preserve the pending CLI, docs, fixtures and test scaffolding on a WIP branch.
+- Replace the invalid literal tab delimiter with cut's default tab delimiter.
+- Restore the standalone launcher and document the gh-glab implementation path.
+- Use generic example hosts and projects in diagnostic fixtures.
+- Add offline checks that parse actual fzf arguments and execute mocked project actions.
+
+### Status after changes
+- Offline validation is recorded in the latest preservation commit.
+- The original 2025 test claims below are historical source-pattern checks, not fresh live API verification.
+- Live interactive GitLab behavior still requires a smoke test before release.
+
+---
+
+
 ## Changes - 2025-10-03
 
 ### What was changed:

@@ -351,19 +351,19 @@ $global_binds
     script_path="${BASH_SOURCE[0]}"
     FZF_DEFAULT_COMMAND="glab repo list --per-page $GLAB_FZF_DEFAULT_LIMIT $*" \
         fzf \
-        --preview='glab repo view $(echo {1} | cut -d"\t" -f1)' \
+        --preview='glab repo view $(echo {1} | cut -f1)' \
         --prompt="project ❱ " \
         --header="$project_header" \
         --bind="start:${GLAB_FZF_HIDE_HINTS:+"toggle-header"}" \
-        --bind="$GLAB_FZF_OPEN_KEY:execute-silent(glab repo view --web \$(echo {1} | cut -d'\t' -f1) &)+refresh-preview" \
-        --bind="$GLAB_FZF_COPY_KEY:execute-silent(glab repo view --web \$(echo {1} | cut -d'\t' -f1) | grep -o 'https://[^[:space:]]*' | head -1 | $GLAB_FZF_COPY_CMD)+refresh-preview" \
+        --bind="$GLAB_FZF_OPEN_KEY:execute-silent(glab repo view --web \$(echo {1} | cut -f1) &)+refresh-preview" \
+        --bind="$GLAB_FZF_COPY_KEY:execute-silent(glab repo view --web \$(echo {1} | cut -f1) | grep -o 'https://[^[:space:]]*' | head -1 | $GLAB_FZF_COPY_CMD)+refresh-preview" \
         --bind="$GLAB_FZF_HELP_KEY:execute(glab help repo)" \
-        --bind="$GLAB_FZF_PROJECT_VIEW_KEY:execute(glab repo view \$(echo {1} | cut -d'\t' -f1))+refresh-preview" \
-        --bind="$GLAB_FZF_PROJECT_CLONE_KEY:execute(glab repo clone \$(echo {1} | cut -d'\t' -f1))+refresh-preview" \
-        --bind="$GLAB_FZF_PROJECT_FORK_KEY:execute(glab repo fork \$(echo {1} | cut -d'\t' -f1))+refresh-preview" \
-        --bind="$GLAB_FZF_PROJECT_ISSUES_KEY:execute($script_path issue --repo \$(echo {1} | cut -d'\t' -f1))+refresh-preview" \
-        --bind="$GLAB_FZF_PROJECT_MRS_KEY:execute($script_path mr --repo \$(echo {1} | cut -d'\t' -f1))+refresh-preview" \
-        --bind="$GLAB_FZF_PROJECT_PIPELINES_KEY:execute($script_path pipeline --repo \$(echo {1} | cut -d'\t' -f1))+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_VIEW_KEY:execute(glab repo view \$(echo {1} | cut -f1))+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_CLONE_KEY:execute(glab repo clone \$(echo {1} | cut -f1))+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_FORK_KEY:execute(glab repo fork \$(echo {1} | cut -f1))+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_ISSUES_KEY:execute($script_path issue --repo \$(echo {1} | cut -f1))+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_MRS_KEY:execute($script_path mr --repo \$(echo {1} | cut -f1))+refresh-preview" \
+        --bind="$GLAB_FZF_PROJECT_PIPELINES_KEY:execute($script_path pipeline --repo \$(echo {1} | cut -f1))+refresh-preview" \
         --bind="$GLAB_FZF_PROJECT_OWNED_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --mine")' \
         --bind="$GLAB_FZF_PROJECT_MEMBER_FILTER_KEY"':reload(eval "$FZF_DEFAULT_COMMAND --member")'
 

@@ -20,37 +20,35 @@ This extension adds fuzzy finding capabilities to GitLab CLI commands, making it
 
 ## Installation
 
-1. Clone this repository:
+Clone the WIP branch and run the standalone launcher:
 
 ```bash
-git clone <repository-url> glab-fzf
+git clone --branch codex/glab-fzf-wip https://github.com/teepobharu/gh-fzf.git glab-fzf
 cd glab-fzf
+./glab-fzf project
 ```
 
-2. Make the script executable:
+The executable bits are tracked in Git. The root launcher forwards to
+`gh-glab/gh-glab`, which remains the implementation entrypoint.
+You can add the checkout directory to PATH to use `glab-fzf`.
+
+For an optional local GitHub CLI extension, install from the implementation directory:
 
 ```bash
-chmod +x glab-fzf
+cd gh-glab
+gh extension install .
+gh glab project
 ```
 
-3. Add to your PATH or create a symlink:
-
-```bash
-# Option 1: Add to PATH
-export PATH="$PATH:/path/to/glab-fzf"
-
-# Option 2: Create a symlink
-ln -s /path/to/glab-fzf/glab-fzf /usr/local/bin/glab-fzf
-```
+The extension still uses `glab` and your GitLab authentication.
+See [INSTALL.md](INSTALL.md) for dependencies and offline checks.
 
 ## Usage
 
 ```bash
-gh extension remove gh-glab
-cd gh-glab && gh extension install .
-gh glab
-
-glab-fzf <command> [flags]
+./glab-fzf <command> [flags]
+# Equivalent direct invocation:
+./gh-glab/gh-glab <command> [flags]
 ```
 
 Available commands:
@@ -172,42 +170,23 @@ export GLAB_FZF_COPY_KEY="ctrl-c"
 
 ## Examples
 
-````bash
-# Browse all issues
-glab-fzf issue
-
-# Browse merge requests assigned to you
-glab-fzf mr --assignee @me
-
-# Browse failed pipelines
-glab-fzf pipeline --status failed
-
-# Browse your owned projects
-glab-fzf project --owned
-
-# Install to GitHub CLI Extension
-
-You can install `glab-fzf` as a GitHub CLI extension by following these steps:
-
-1. Clone this repository to your local `gh` extensions directory:
-   ```bash
-   git clone <repository-url> $(gh config get extensionsPath)/glab-fzf
-````
-
-2. Make the script executable:
-
-   ```bash
-   chmod +x $(gh config get extensionsPath)/glab-fzf/glab-fzf
-   ```
-
-3. Test the installation by running:
-   ```bash
-   gh glab-fzf <command>
-   ```
-
-Replace `<command>` with any of the available commands, such as `issue`, `mr`, `pipeline`, or `project`.
-
+```bash
+./glab-fzf issue
+./glab-fzf mr --assignee @me
+./glab-fzf pipeline
+./glab-fzf project --mine
 ```
+
+## Offline verification
+
+```bash
+python3 tests/test-project-bindings.py
+```
+
+These regression checks parse real fzf arguments and exercise project path
+extraction with mocked commands. They do not execute live GitLab actions.
+Interactive behavior and GitLab command compatibility still need a live smoke
+test before release.
 
 ## Contributing
 
@@ -216,4 +195,3 @@ This project is inspired by [gh-fzf](https://github.com/benelan/gh-fzf). Contrib
 ## License
 
 MIT License - see the original gh-fzf project for license details.
-```
