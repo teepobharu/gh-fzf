@@ -1,0 +1,5 @@
+# Test data for issue selection
+# Format: issue_number|selected_line
+42|#42	A few minutes ago	Fix authentication bug in login module	john.doe	enhancement
+35|#35	2 hours ago	Add dark mode toggle to user settings	jane.smith	feature
+28|#28	1 day ago	Performance issue with large dataset queries	mike.wilson	bug,performance

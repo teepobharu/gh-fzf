@@ -1,0 +1,5 @@
+# Test data for MR selection
+# Format: mr_number|selected_line
+125|!125	2 hours ago	feat: implement user authentication with OAuth2	john.doe	feature-oauth	ready
+118|!118	1 day ago	fix: resolve memory leak in data processing	jane.smith	bugfix-memory	draft
+112|!112	3 days ago	docs: update API documentation for v2.0	mike.wilson	docs-v2	ready

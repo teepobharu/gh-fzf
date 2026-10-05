@@ -1,0 +1,6 @@
+success	10 minutes ago	CI Pipeline	main	Deploy to production	push	12345678
+running	30 minutes ago	Test Suite	feature-branch	Run automated tests	merge_request_event	12345677
+failed	2 hours ago	Security Scan	main	Security vulnerability scan	schedule	12345676
+success	1 day ago	Build & Test	develop	Build and test application	push	12345675
+canceled	2 days ago	Deploy Staging	staging	Deploy to staging environment	push	12345674
+success	3 days ago	Code Quality	main	Run code quality checks	merge_request_event	12345673

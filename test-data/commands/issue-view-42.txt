@@ -1,0 +1,26 @@
+Fix authentication bug in login module (#42)
+Open • john.doe opened 2 hours ago • 3 comments
+
+Labels: enhancement
+Assignees: jane.smith
+Milestone: v2.1.0
+
+Description:
+The login module has an authentication bug that prevents users from logging in
+with certain special characters in their passwords. This needs to be fixed
+before the next release.
+
+Steps to reproduce:
+1. Create user with password containing @ symbol
+2. Attempt to login
+3. Login fails with generic error message
+
+Expected behavior: Login should succeed
+Actual behavior: Login fails
+
+Comments:
+jane.smith: I'll take a look at this
+mike.wilson: This might be related to URL encoding
+john.doe: Thanks for the quick response!
+
+View this issue on GitLab: https://gitlab.com/user/project/-/issues/42

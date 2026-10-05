@@ -1,0 +1,5 @@
+# Test data for project selection
+# Format: project_path|selected_line
+user/awesome-web-app|user/awesome-web-app	A modern web application built with React and Node.js	https://gitlab.com/user/awesome-web-app
+user/api-gateway|user/api-gateway	Microservices API gateway with authentication and rate limiting	https://gitlab.com/user/api-gateway
+team/shared-library|team/shared-library	Common utilities and components shared across projects	https://gitlab.com/team/shared-library

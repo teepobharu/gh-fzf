@@ -1,0 +1,17 @@
+Pipeline #12345678 • success • 10 minutes ago
+
+Commit: a1b2c3d4 "Deploy to production"
+Branch: main
+Author: john.doe
+Triggered by: push event
+
+Jobs:
+✓ build       (2m 15s)
+✓ test        (5m 30s)
+✓ security    (3m 45s)
+✓ deploy      (8m 20s)
+
+Duration: 19m 50s
+Coverage: 87.5%
+
+View this pipeline on GitLab: https://gitlab.com/user/project/-/pipelines/12345678

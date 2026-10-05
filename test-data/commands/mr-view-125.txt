@@ -1,0 +1,26 @@
+feat: implement user authentication with OAuth2 (!125)
+Open • john.doe opened 2 hours ago • feature-oauth → main
+
+Labels: feature
+Assignees: jane.smith
+Reviewers: mike.wilson, sarah.connor
+
+Changes: +245 -67 (15 files changed)
+
+Description:
+Implement OAuth2 authentication to allow users to login with third-party
+providers like Google, GitHub, and GitLab.
+
+Features:
+- OAuth2 provider configuration
+- User profile synchronization
+- Token refresh handling
+- Security improvements
+
+This MR includes:
+- New OAuth2 service implementation
+- Updated user model with provider fields
+- Integration tests for all providers
+- Documentation updates
+
+View this merge request on GitLab: https://gitlab.com/user/project/-/merge_requests/125
