@@ -28,36 +28,25 @@ An fzf wrapper around the GitHub CLI.
    - [Related projects](#related-projects)
    - [Local Development & Testing](#local-development--testing)
 
-## Local Development & Testing2
+## Local Development & Testing
 
-To test changes to `gh-fzfl` locally with the GitHub CLI, link your local directory as a CLI extension. This lets you use your development version without reinstalling from a remote source.
-
-### Link your local gh-fzfll as a gh extension
+Install this checkout as a local GitHub CLI extension:
 
 ```bash
-ln -s -f $(pwd)/gh-fzf ./gh-fzfll/gh-fzfll
-cd gh-fzfll
-gh extension remove gh-fzfll 2>/dev/null || true
-gh extension install . 
-cd -
-read -p "test changes ... ?" conf
-gh fzfll search repos test
+gh extension install .
+gh fzf repo
+gh fzf search repos example
 ```
 
-Run and test your local changes directly:
-
-```sh
-gh fzfll <command> [...args]
-```
-
-4. To remove the local link and revert to the remote version:
+Run the offline regression checks for repository and search bindings:
 
 ```bash
-gh extension remove gh-fzf
-gh extension install benelan/gh-fzf
+python3 tests/test-fzf-bindings.py
 ```
 
-See [`gh extension create`](https://cli.github.com/manual/gh_extension_create) in the GitHub CLI documentation for more details.
+These checks validate actual fzf argument parsing without executing keybinding
+callbacks or contacting GitHub. A live interactive smoke test is still required
+before release.
 
 ## Installation
 
